@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fondo de Pantalla Ecoturístico Hiper-Futurista (Responsive)</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden; /* Evita barras de desplazamiento */
+        background-color: #000; /* Fondo negro puro */
+        font-family: "Electrolize", sans-serif; /* Fuente futurista */
+        color: #fff;
+      }
+      #logoCanvas,
+      #textCanvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: pointer; /* Indica que son clickeables */
+      }
+    </style>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="mainCanvas"></canvas>
+    <canvas id="logoCanvas"></canvas>
+    <canvas id="textCanvas"></canvas>
+
+    <script>
+      // --- Referencias a los canvases y contextos ---
+      const mainCanvas = document.getElementById("mainCanvas");
+      const mainCtx = mainCanvas.getContext("2d");
+
+      const logoCanvas = document.getElementById("logoCanvas");
+      const logoCtx = logoCanvas.getContext("2d");
+      const logoImg = new Image();
+      logoImg.src =
+        "https://sistemaecoturistico.org/wp-content/uploads/2025/05/Sistema-Educativo-Ecoturistico-del-Pacifico-1.svg";
+      let logoX, logoY, logoSpeedX, logoSpeedY;
+      const logoHeightPercentage = 0.06; // Altura deseada del logo como % de la altura de la ventana
+      let logoWidthPx; // Ancho del logo en píxeles, calculado dinámicamente
+      let logoSizePx; // Altura del logo en píxeles, calculado dinámicamente
+
+      const textCanvas = document.getElementById("textCanvas");
+      const textCtx = textCanvas.getContext("2d");
+      const mainText = "Sistema Educativo Ecoturístico del Pacífico";
+      let textX,
+        textY,
+        textSpeedX,
+        textSpeedY,
+        textPulseFactor = 0;
+      const baseTextSizeVmin = 3.5; // Tamaño base del texto en vmin (viewport min)
+      let currentTextSize; // Tamaño de fuente en píxeles, calculado dinámicamente
+      const textFont = "'Electrolize', sans-serif";
+      const textPulseSpeed = 0.03;
+
+      const targetURL = "https://sistemaecoturistico.org/";
+
+      // --- Configuración de elementos del fondo (ahora con valores base para escalado) ---
+      const stars = [];
+      const baseNumStars = 250; // Número base de estrellas
+      const starSpeedFactor = 0.00015; // Velocidad base para escalar con tamaño de pantalla
+
+      const planets = [];
+      const baseNumPlanets = 18;
+      const minPlanetRadiusFactor = 0.005; // Factor para radio mínimo (relativo al ancho/alto)
+      const maxPlanetRadiusFactor = 0.025; // Factor para radio máximo
+      const planetSpeedFactorBase = 0.0004; // Velocidad base para escalar
+      const planetPulseSpeed = 0.03;
+      const planetColors = [
+        "#00FFFF",
+        "#FF00FF",
+        "#00FF7F",
+        "#FFD700",
+        "#1E90FF",
+        "#FF1493",
+        "#A020F0",
+        "#00FF00",
+        "#FF4500",
+        "#4169E1",
+      ];
+      let pulseFactor = 0;
+
+      const rays = [];
+      const maxRays = 12;
+      const raySpawnChance = 0.06;
+      const rayMinLengthFactor = 0.05; // Factor de longitud
+      const rayMaxLengthFactor = 0.15;
+      const raySpeedFactor = 0.008; // Factor de velocidad
+      const rayFadeSpeed = 0.06;
+      const rayColor = "#ccffcc";
+
+      const energyLineChance = 0.003;
+      const energyLineMaxDistanceFactor = 0.35; // Factor de distancia
+      const energyLineBaseColor = "0, 255, 255";
+      const energyLineOpacity = 0.1;
+
+      const backgroundFlashes = [];
+      const maxFlashes = 10;
+      const flashProbability = 0.008;
+      const flashDuration = 15;
+      const flashMinSizeFactor = 0.01;
+      const flashMaxSizeFactor = 0.03;
+
+      let canvasWidth, canvasHeight;
+      let scaleFactor; // Factor de escala basado en el tamaño de la ventana
+
+      // --- Funciones de Utilidad ---
+      function getRandomColor() {
+        return planetColors[Math.floor(Math.random() * planetColors.length)];
+      }
+      function getRandomFloat(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      // --- Clases para los Elementos del Fondo ---
+
+      class Star {
+        constructor() {
+          this.x = Math.random() * canvasWidth;
+          this.y = Math.random() * canvasHeight;
+          this.size = Math.random() * 1.2 + 0.3;
+          this.speedX = (Math.random() - 0.5) * starSpeedFactor * scaleFactor; // Velocidad escalada
+          this.speedY = (Math.random() - 0.5) * starSpeedFactor * scaleFactor;
+          this.alpha = Math.random() * 0.6 + 0.4;
+        }
+        update() {
+          this.x += this.speedX;
+          this.y += this.speedY;
+          if (this.x < 0) this.x = canvasWidth;
+          if (this.x > canvasWidth) this.x = 0;
+          if (this.y < 0) this.y = canvasHeight;
+          if (this.y > canvasHeight) this.y = 0;
+        }
+        draw() {
+          mainCtx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+          mainCtx.beginPath();
+          mainCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          mainCtx.fill();
+        }
+      }
+
+      class PlanetParticle {
+        constructor(x, y, color, parentRadius) {
+          this.x = x;
+          this.y = y;
+          this.color = color;
+          this.radius = getRandomFloat(0.5, 1.5) * Math.sqrt(scaleFactor); // Escalar el tamaño de la partícula
+          this.angle = Math.random() * Math.PI * 2;
+          this.distance = getRandomFloat(
+            parentRadius * 0.7,
+            parentRadius * 1.2
+          ); // Distancia del centro del planeta, relativa al radio del planeta
+          this.speed = getRandomFloat(0.02, 0.08); // Velocidad de órbita
+          this.alpha = getRandomFloat(0.4, 0.8);
+          this.pulseOffset = Math.random() * Math.PI * 2;
+        }
+        update(planetX, planetY) {
+          this.angle += this.speed;
+          this.x = planetX + Math.cos(this.angle) * this.distance;
+          this.y = planetY + Math.sin(this.angle) * this.distance;
+          this.alpha = Math.sin(pulseFactor + this.pulseOffset) * 0.3 + 0.5;
+        }
+        draw() {
+          const r = parseInt(this.color.slice(1, 3), 16);
+          const g = parseInt(this.color.slice(3, 5), 16);
+          const b = parseInt(this.color.slice(5, 7), 16);
+          mainCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${this.alpha})`;
+          mainCtx.beginPath();
+          mainCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+          mainCtx.fill();
+          mainCtx.shadowBlur = 5;
+          mainCtx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
+          mainCtx.fill();
+          mainCtx.shadowBlur = 0;
+        }
+      }
+
+      class Planet {
+        constructor() {
+          this.x = Math.random() * canvasWidth;
+          this.y = Math.random() * canvasHeight;
+          // Radios de planeta escalados por el tamaño de la pantalla
+          this.radius = getRandomFloat(
+            minPlanetRadiusFactor * Math.min(canvasWidth, canvasHeight),
+            maxPlanetRadiusFactor * Math.min(canvasWidth, canvasHeight)
+          );
+          this.color = getRandomColor();
+          this.speedX =
+            (Math.random() - 0.5) * planetSpeedFactorBase * scaleFactor; // Velocidad escalada
+          this.speedY =
+            (Math.random() - 0.5) * planetSpeedFactorBase * scaleFactor;
+          this.pulseOffset = Math.random() * Math.PI * 2;
+          this.trail = [];
+          this.trailLength = Math.floor(this.radius / 3);
+
+          this.energyParticles = [];
+          const numParticles = Math.floor(this.radius / 7);
+          for (let i = 0; i < numParticles; i++) {
+            this.energyParticles.push(
+              new PlanetParticle(this.x, this.y, this.color, this.radius)
+            );
+          }
+        }
+        update() {
+          this.x += this.speedX;
+          this.y += this.speedY;
+
+          this.trail.push({ x: this.x, y: this.y });
+          if (this.trail.length > this.trailLength) {
+            this.trail.shift();
+          }
+
+          if (this.x + this.radius < 0) this.x = canvasWidth + this.radius;
+          if (this.x - this.radius > canvasWidth) this.x = -this.radius;
+          if (this.y + this.radius < 0) this.y = canvasHeight + this.radius;
+          if (this.y - this.radius > canvasHeight) this.y = -this.radius;
+
+          this.energyParticles.forEach((p) => p.update(this.x, this.y));
+        }
+        draw() {
+          for (let i = 0; i < this.trail.length; i++) {
+            const pos = this.trail[i];
+            const alpha = (i / this.trail.length) * 0.25;
+            const trailRadius = this.radius * (i / this.trail.length) * 0.8;
+            mainCtx.beginPath();
+            mainCtx.arc(pos.x, pos.y, trailRadius, 0, Math.PI * 2);
+            const r = parseInt(this.color.slice(1, 3), 16);
+            const g = parseInt(this.color.slice(3, 5), 16);
+            const b = parseInt(this.color.slice(5, 7), 16);
+            mainCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            mainCtx.fill();
+          }
+
+          mainCtx.beginPath();
+          mainCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+          mainCtx.fillStyle = this.color;
+          const pulse =
+            Math.sin(pulseFactor + this.pulseOffset) * (this.radius / 3) +
+            this.radius / 2;
+          mainCtx.shadowBlur = Math.max(0, pulse);
+          mainCtx.shadowColor = this.color;
+          mainCtx.fill();
+          mainCtx.shadowBlur = 0;
+
+          this.energyParticles.forEach((p) => p.draw());
+        }
+      }
+
+      class Ray {
+        constructor() {
+          this.x = Math.random() * canvasWidth;
+          this.y = -(rayMaxLengthFactor * canvasHeight); // Empieza por encima del canvas
+          this.length = getRandomFloat(
+            rayMinLengthFactor * canvasHeight,
+            rayMaxLengthFactor * canvasHeight
+          );
+          this.speed = raySpeedFactor * scaleFactor; // Velocidad escalada
+          this.alpha = 1;
+        }
+        update() {
+          this.y += this.speed;
+          this.alpha -= rayFadeSpeed;
+        }
+        draw() {
+          mainCtx.beginPath();
+          mainCtx.moveTo(this.x, this.y);
+          mainCtx.lineTo(this.x, this.y + this.length);
+          mainCtx.strokeStyle = `rgba(255, 255, 255, ${Math.max(
+            0,
+            this.alpha
+          )})`;
+          mainCtx.lineWidth = 2;
+          mainCtx.shadowBlur = 15;
+          mainCtx.shadowColor = rayColor;
+          mainCtx.stroke();
+          mainCtx.shadowBlur = 0;
+        }
+      }
+
+      class BackgroundFlash {
+        constructor() {
+          this.x = Math.random() * canvasWidth;
+          this.y = Math.random() * canvasHeight;
+          this.size = getRandomFloat(
+            flashMinSizeFactor * Math.min(canvasWidth, canvasHeight),
+            flashMaxSizeFactor * Math.min(canvasWidth, canvasHeight)
+          );
+          this.life = flashDuration;
+          this.alpha = 1;
+          this.color = `rgba(255, 255, 255, ${this.alpha})`;
+        }
+        update() {
+          this.life--;
+          this.alpha = this.life / flashDuration;
+          this.size *= 1.05;
+        }
+        draw() {
+          mainCtx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+          mainCtx.beginPath();
+          mainCtx.arc(this.x, this.y, this.size / 2, 0, Math.PI * 2);
+          mainCtx.fill();
+          mainCtx.shadowBlur = 20;
+          mainCtx.shadowColor = `rgba(255, 255, 255, ${this.alpha * 0.8})`;
+          mainCtx.fill();
+          mainCtx.shadowBlur = 0;
+        }
+      }
+
+      // --- Inicialización y Actualización de todo ---
+
+      function resizeCanvas() {
+        canvasWidth = window.innerWidth;
+        canvasHeight = window.innerHeight;
+        mainCanvas.width = canvasWidth;
+        mainCanvas.height = canvasHeight;
+        logoCanvas.width = canvasWidth;
+        logoCanvas.height = canvasHeight;
+        textCanvas.width = canvasWidth;
+        textCanvas.height = canvasHeight;
+
+        // Calcular factor de escala basado en el tamaño de la ventana
+        // Usamos vmin (el menor entre ancho y alto) para asegurar que escale bien en ambos ejes
+        scaleFactor = Math.min(canvasWidth, canvasHeight) / 1000; // Factor base, ej. si 1000px de vmin es 1x
+        if (scaleFactor < 0.5) scaleFactor = 0.5; // Mínimo para evitar que las cosas sean diminutas
+
+        // Calcular número de estrellas y planetas basado en el tamaño del área
+        const areaFactor = (canvasWidth * canvasHeight) / (1920 * 1080); // Basado en Full HD
+        stars.length = 0;
+        const actualNumStars = Math.floor(baseNumStars * areaFactor);
+        for (let i = 0; i < actualNumStars; i++) {
+          stars.push(new Star());
+        }
+
+        planets.length = 0;
+        const actualNumPlanets = Math.floor(baseNumPlanets * areaFactor);
+        for (let i = 0; i < actualNumPlanets; i++) {
+          planets.push(new Planet());
+        }
+
+        // Calcular tamaño actual del texto
+        currentTextSize = Math.max(
+          16,
+          Math.min(
+            60,
+            (baseTextSizeVmin * Math.min(canvasWidth, canvasHeight)) / 100
+          )
+        ); // Min 16px, Max 60px
+
+        if (logoImg.complete) {
+          initLogoPosition();
+        }
+        initTextPosition();
+      }
+
+      // --- Lógica del Logo ---
+      function initLogoPosition() {
+        logoSizePx = canvasHeight * logoHeightPercentage; // Logo es un porcentaje de la altura de la ventana
+        if (logoImg.naturalWidth === 0 || logoImg.naturalHeight === 0) {
+          console.warn(
+            "Logo image not loaded or has invalid dimensions for initial positioning."
+          );
+          logoWidthPx = logoSizePx;
+        } else {
+          const aspectRatio = logoImg.naturalWidth / logoImg.naturalHeight;
+          logoWidthPx = logoSizePx * aspectRatio;
+        }
+
+        logoX = Math.random() * (canvasWidth - logoWidthPx);
+        logoY = Math.random() * (canvasHeight - logoSizePx);
+        logoSpeedX = getRandomFloat(-1.2, 1.2) * scaleFactor; // Velocidad escalada
+        logoSpeedY = getRandomFloat(-1.2, 1.2) * scaleFactor; // Velocidad escalada
+      }
+
+      function updateLogo() {
+        if (!logoImg.complete) return;
+
+        const aspectRatio = logoImg.naturalWidth / logoImg.naturalHeight;
+        logoWidthPx = logoSizePx * aspectRatio;
+
+        logoX += logoSpeedX;
+        logoY += logoSpeedY;
+
+        if (logoX < 0 || logoX + logoWidthPx > canvasWidth) {
+          logoSpeedX *= -1;
+        }
+        if (logoY < 0 || logoY + logoSizePx > canvasHeight) {
+          logoSpeedY *= -1;
+        }
+      }
+
+      function drawLogo() {
+        logoCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        if (logoImg.complete && logoSizePx && logoWidthPx) {
+          logoCtx.drawImage(logoImg, logoX, logoY, logoWidthPx, logoSizePx);
+        }
+      }
+
+      // --- Lógica del Texto ---
+      function initTextPosition() {
+        textCtx.font = `bold ${currentTextSize}px ${textFont}`; // Usar tamaño de texto responsivo
+        const textWidth = textCtx.measureText(mainText).width;
+
+        textX = Math.random() * (canvasWidth - textWidth);
+        textY = Math.random() * (canvasHeight - currentTextSize); // Ajustar por el nuevo tamaño
+
+        textSpeedX = getRandomFloat(-1, 1) * scaleFactor; // Velocidad escalada
+        textSpeedY = getRandomFloat(-1, 1) * scaleFactor; // Velocidad escalada
+      }
+
+      function updateText() {
+        textX += textSpeedX;
+        textY += textSpeedY;
+
+        textCtx.font = `bold ${currentTextSize}px ${textFont}`;
+        const textWidth = textCtx.measureText(mainText).width;
+
+        if (textX < 0 || textX + textWidth > canvasWidth) {
+          textSpeedX *= -1;
+        }
+        // textY es la línea base, por lo que el top es textY - currentTextSize
+        if (textY < currentTextSize || textY > canvasHeight) {
+          textSpeedY *= -1;
+        }
+      }
+
+      function drawText() {
+        textCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        textCtx.font = `bold ${currentTextSize}px ${textFont}`; // Usar tamaño de texto responsivo
+
+        const textBrightness = Math.sin(textPulseFactor) * 0.3 + 0.7;
+        const textShadowAlpha = Math.sin(textPulseFactor) * 0.4 + 0.6;
+
+        textCtx.fillStyle = `rgba(255, 255, 255, ${textBrightness})`;
+        textCtx.shadowBlur = 10;
+        textCtx.shadowColor = `rgba(204, 255, 255, ${textShadowAlpha})`;
+        textCtx.fillText(mainText, textX, textY);
+        textCtx.shadowBlur = 0;
+      }
+
+      // --- Lógica de Rayos ---
+      function spawnRay() {
+        if (rays.length < maxRays && Math.random() < raySpawnChance) {
+          rays.push(new Ray());
+        }
+      }
+
+      function updateAndDrawRays() {
+        for (let i = rays.length - 1; i >= 0; i--) {
+          rays[i].update();
+          rays[i].draw();
+          if (rays[i].alpha <= 0 || rays[i].y > canvasHeight + rays[i].length) {
+            rays.splice(i, 1);
+          }
+        }
+      }
+
+      // --- Lógica de Destellos de Fondo ---
+      function spawnFlash() {
+        if (
+          backgroundFlashes.length < maxFlashes &&
+          Math.random() < flashProbability
+        ) {
+          backgroundFlashes.push(new BackgroundFlash());
+        }
+      }
+
+      function updateAndDrawFlashes() {
+        for (let i = backgroundFlashes.length - 1; i >= 0; i--) {
+          backgroundFlashes[i].update();
+          backgroundFlashes[i].draw();
+          if (backgroundFlashes[i].life <= 0) {
+            backgroundFlashes.splice(i, 1);
+          }
+        }
+      }
+
+      // --- Lógica de Líneas de Energía ---
+      function drawEnergyLines() {
+        mainCtx.lineWidth = 0.5;
+        mainCtx.shadowBlur = 8;
+        mainCtx.shadowColor = `rgba(${energyLineBaseColor}, 0.4)`;
+
+        const currentEnergyLineMaxDistance =
+          energyLineMaxDistanceFactor * Math.min(canvasWidth, canvasHeight);
+
+        for (let i = 0; i < planets.length; i++) {
+          for (let j = i + 1; j < planets.length; j++) {
+            const p1 = planets[i];
+            const p2 = planets[j];
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (
+              distance < currentEnergyLineMaxDistance &&
+              Math.random() < energyLineChance
+            ) {
+              mainCtx.beginPath();
+              mainCtx.moveTo(p1.x, p1.y);
+
+              if (Math.random() < 0.05) {
+                // 5% de probabilidad de glitch
+                const midX = (p1.x + p2.x) / 2;
+                const midY = (p1.y + p2.y) / 2;
+                const offset = getRandomFloat(
+                  -10 * scaleFactor,
+                  10 * scaleFactor
+                ); // Escalar offset
+                mainCtx.lineTo(midX + offset, midY + offset);
+              }
+
+              const currentOpacity =
+                energyLineOpacity *
+                (1 - distance / currentEnergyLineMaxDistance);
+              mainCtx.strokeStyle = `rgba(${energyLineBaseColor}, ${currentOpacity})`;
+              mainCtx.lineTo(p2.x, p2.y);
+              mainCtx.stroke();
+            }
+          }
+        }
+        mainCtx.shadowBlur = 0;
+      }
+
+      // --- Manejo de clics ---
+      function handleClick(event) {
+        const clickX = event.clientX;
+        const clickY = event.clientY;
+
+        // --- Chequear si se hizo clic en el LOGO ---
+        if (logoImg.complete && logoSizePx && logoWidthPx) {
+          if (
+            clickX >= logoX &&
+            clickX <= logoX + logoWidthPx &&
+            clickY >= logoY &&
+            clickY <= logoY + logoSizePx
+          ) {
+            window.open(targetURL, "_blank");
+            return;
+          }
+        }
+
+        // --- Chequear si se hizo clic en el TEXTO ---
+        textCtx.font = `bold ${currentTextSize}px ${textFont}`;
+        const currentTextWidth = textCtx.measureText(mainText).width;
+
+        if (
+          clickX >= textX &&
+          clickX <= textX + currentTextWidth &&
+          clickY >= textY - currentTextSize &&
+          clickY <= textY
+        ) {
+          window.open(targetURL, "_blank");
+          return;
+        }
+      }
+
+      // --- Bucle de Animación Principal ---
+      function animate() {
+        requestAnimationFrame(animate);
+
+        pulseFactor += planetPulseSpeed;
+        textPulseFactor += textPulseSpeed;
+
+        mainCtx.fillStyle = "#000";
+        mainCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        stars.forEach((star) => {
+          star.update();
+          star.draw();
+        });
+
+        planets.forEach((planet) => {
+          planet.update();
+          planet.draw();
+        });
+
+        drawEnergyLines();
+
+        spawnRay();
+        updateAndDrawRays();
+
+        spawnFlash();
+        updateAndDrawFlashes();
+
+        updateLogo();
+        drawLogo();
+
+        updateText();
+        drawText();
+      }
+
+      // --- Event Listeners y Carga Inicial ---
+      window.addEventListener("resize", resizeCanvas);
+
+      document.body.addEventListener("click", handleClick);
+
+      logoImg.onload = () => {
+        console.log("Logo image loaded successfully.");
+        resizeCanvas();
+        if (!animationStarted) {
+          animate();
+          animationStarted = true;
+        }
+      };
+
+      logoImg.onerror = () => {
+        console.error(
+          "Failed to load logo image. Ensure the URL is correct and accessible."
+        );
+        if (!animationStarted) {
+          resizeCanvas();
+          animate();
+          animationStarted = true;
+        }
+      };
+
+      let animationStarted = false;
+
+      if (logoImg.complete) {
+        logoImg.onload();
+      } else {
+        setTimeout(() => {
+          if (!animationStarted) {
+            console.warn(
+              "Logo image taking too long to load or failed, starting animation without it."
+            );
+            resizeCanvas();
+            animate();
+            animationStarted = true;
+          }
+        }, 1000);
+      }
+    </script>
+  </body>
+</html>
